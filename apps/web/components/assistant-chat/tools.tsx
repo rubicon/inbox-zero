@@ -12,6 +12,10 @@ import type {
   UpdateRuleConditionsOutput,
   UpdateRuleConditionsTool,
 } from "@/utils/ai/assistant/tools/rules/update-rule-conditions-tool";
+import type {
+  UpdateRuleStateOutput,
+  UpdateRuleStateTool,
+} from "@/utils/ai/assistant/tools/rules/update-rule-state-tool";
 import type { ManageInboxTool } from "@/utils/ai/assistant/chat-inbox-tools";
 import { cn } from "@/utils";
 import { isDefined } from "@/utils/types";
@@ -1297,6 +1301,193 @@ export function UpdatedLearnedPatterns({
   );
 }
 
+export function UpdatedRuleState({
+  args,
+  output,
+  preview,
+}: {
+  args: UpdateRuleStateTool["input"];
+  output: UpdateRuleStateOutput;
+  preview?: boolean;
+}) {
+  const ruleId = output.ruleId;
+  const ruleName = output.ruleName || args.ruleName;
+  const enabled = output.enabled ?? args.operation === "enable";
+  const label = enabled ? "Enabled" : "Disabled";
+
+  return (
+    <Card>
+      <RuleToolCardHeader
+        title={ruleName}
+        actions={
+          preview ? (
+            <RuleActionsPreview enabled={enabled} />
+          ) : ruleId ? (
+            <RuleActions ruleId={ruleId} initialEnabled={enabled} />
+          ) : null
+        }
+      />
+      <CardContent className="space-y-3 px-4 py-3.5">
+        <div className="flex items-center gap-2 text-sm">
+          <FieldLabel>Status</FieldLabel>
+          <Badge color={enabled ? "green" : "gray"}>{label}</Badge>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+export function PendingDeleteRuleToolCard({
+  args,
+  output,
+  disableConfirm,
+}: {
+  args: UpdateRuleStateTool["input"];
+  output: UpdateRuleStateOutput;
+  disableConfirm: boolean;
+}) {
+  const { emailAccountId } = useAccount();
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleted, setDeleted] = useState(
+    output.confirmationState === "confirmed",
+  );
+  const ruleId = output.ruleId;
+  const ruleName = output.ruleName || args.ruleName;
+  const wasEnabled = output.wasEnabled ?? true;
+
+  const handleDelete = async () => {
+    if (!ruleId) {
+      toastError({ description: "Could not delete this rule." });
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      const result = await deleteRuleAction(emailAccountId, { id: ruleId });
+      if (result?.serverError) {
+        toastError({ description: result.serverError });
+        return;
+      }
+
+      setDeleted(true);
+      toastSuccess({ description: "The rule has been deleted." });
+    } catch {
+      toastError({ description: "Failed to delete rule." });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-start gap-3 space-y-0 border-b px-4 py-3.5">
+        <TrashIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+        <div className="min-w-0 flex-1">
+          <h3 className="truncate text-base font-semibold">{ruleName}</h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {deleted ? "Deleted rule" : "Pending deletion"}
+          </p>
+        </div>
+        {deleted && (
+          <Badge color="green" className="shrink-0">
+            Deleted
+          </Badge>
+        )}
+        {!deleted && ruleId && (
+          <RuleEditToggleActions ruleId={ruleId} initialEnabled={wasEnabled} />
+        )}
+      </CardHeader>
+
+      {!deleted && (
+        <CardContent className="space-y-3 px-4 py-3.5">
+          <Alert
+            variant="default"
+            className="border-amber-500/40 bg-amber-500/5"
+          >
+            <AlertTriangleIcon className="size-4 text-amber-600" />
+            <AlertTitle>Confirm rule deletion</AlertTitle>
+            <AlertDescription className="text-sm text-muted-foreground">
+              This will permanently delete the rule and its actions.
+            </AlertDescription>
+          </Alert>
+
+          <div className="flex justify-end">
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleDelete}
+              disabled={disableConfirm || isDeleting || !ruleId}
+              className="gap-2"
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                "Delete rule"
+              )}
+            </Button>
+          </div>
+        </CardContent>
+      )}
+    </Card>
+  );
+}
+
+export function PendingDeleteRulePreviewCard({
+  args,
+  output,
+}: {
+  args: UpdateRuleStateTool["input"];
+  output: UpdateRuleStateOutput;
+}) {
+  const deleted = output.confirmationState === "confirmed";
+  const ruleName = output.ruleName || args.ruleName;
+  const wasEnabled = output.wasEnabled ?? true;
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-start gap-3 space-y-0 border-b px-4 py-3.5">
+        <TrashIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+        <div className="min-w-0 flex-1">
+          <h3 className="truncate text-base font-semibold">{ruleName}</h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {deleted ? "Deleted rule" : "Pending deletion"}
+          </p>
+        </div>
+        {deleted && (
+          <Badge color="green" className="shrink-0">
+            Deleted
+          </Badge>
+        )}
+        {!deleted && <RuleEditToggleActionsPreview enabled={wasEnabled} />}
+      </CardHeader>
+
+      {!deleted && (
+        <CardContent className="space-y-3 px-4 py-3.5">
+          <Alert
+            variant="default"
+            className="border-amber-500/40 bg-amber-500/5"
+          >
+            <AlertTriangleIcon className="size-4 text-amber-600" />
+            <AlertTitle>Confirm rule deletion</AlertTitle>
+            <AlertDescription className="text-sm text-muted-foreground">
+              This will permanently delete the rule and its actions.
+            </AlertDescription>
+          </Alert>
+
+          <div className="flex justify-end">
+            <Button variant="destructive" size="sm" disabled>
+              Delete rule
+            </Button>
+          </div>
+        </CardContent>
+      )}
+    </Card>
+  );
+}
+
 export function UpdatePersonalInstructions({
   args,
 }: {
@@ -1344,76 +1535,96 @@ export function AddToKnowledgeBase({
   );
 }
 
-function RuleActions({ ruleId }: { ruleId: string }) {
+function RuleActions({
+  ruleId,
+  initialEnabled = true,
+}: {
+  ruleId: string;
+  initialEnabled?: boolean;
+}) {
+  const { emailAccountId } = useAccount();
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <RuleEditToggleActions ruleId={ruleId} initialEnabled={initialEnabled} />
+      <Tooltip content="Delete rule">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-8 w-8 p-0 text-muted-foreground"
+          onClick={async () => {
+            const yes = confirm("Are you sure you want to delete this rule?");
+            if (yes) {
+              try {
+                const result = await deleteRuleAction(emailAccountId, {
+                  id: ruleId,
+                });
+                if (result?.serverError) {
+                  toastError({ description: result.serverError });
+                } else {
+                  toastSuccess({
+                    description: "The rule has been deleted.",
+                  });
+                }
+              } catch {
+                toastError({ description: "Failed to delete rule." });
+              }
+            }
+          }}
+        >
+          <TrashIcon className="size-4" />
+        </Button>
+      </Tooltip>
+    </div>
+  );
+}
+
+function RuleEditToggleActions({
+  ruleId,
+  initialEnabled = true,
+}: {
+  ruleId: string;
+  initialEnabled?: boolean;
+}) {
   const { emailAccountId } = useAccount();
   const ruleDialog = useDialogState<{ ruleId: string }>();
-  const [enabled, setEnabled] = useState(true);
+  const [enabled, setEnabled] = useState(initialEnabled);
   const { executeAsync: toggleRule } = useAction(
     toggleRuleAction.bind(null, emailAccountId),
   );
 
   return (
     <>
-      <div className="flex items-center gap-1.5">
-        <Tooltip content="Edit rule">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 w-8 p-0 text-muted-foreground"
-            onClick={() => ruleDialog.onOpen({ ruleId })}
-          >
-            <PencilIcon className="size-4" />
-          </Button>
-        </Tooltip>
-        <Tooltip content="Delete rule">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 w-8 p-0 text-muted-foreground"
-            onClick={async () => {
-              const yes = confirm("Are you sure you want to delete this rule?");
-              if (yes) {
-                try {
-                  const result = await deleteRuleAction(emailAccountId, {
-                    id: ruleId,
-                  });
-                  if (result?.serverError) {
-                    toastError({ description: result.serverError });
-                  } else {
-                    toastSuccess({
-                      description: "The rule has been deleted.",
-                    });
-                  }
-                } catch {
-                  toastError({ description: "Failed to delete rule." });
-                }
-              }
-            }}
-          >
-            <TrashIcon className="size-4" />
-          </Button>
-        </Tooltip>
-        <Switch
-          checked={enabled}
-          onCheckedChange={async (checked) => {
-            setEnabled(checked);
-            try {
-              const result = await toggleRule({ ruleId, enabled: checked });
-              if (result?.serverError) {
-                setEnabled(!checked);
-                toastError({
-                  description: `Failed to ${checked ? "enable" : "disable"} rule.`,
-                });
-              }
-            } catch {
+      <Tooltip content="Edit rule">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-8 w-8 p-0 text-muted-foreground"
+          onClick={() => ruleDialog.onOpen({ ruleId })}
+        >
+          <PencilIcon className="size-4" />
+        </Button>
+      </Tooltip>
+      <Switch
+        checked={enabled}
+        onCheckedChange={async (checked) => {
+          setEnabled(checked);
+          try {
+            const result = await toggleRule({ ruleId, enabled: checked });
+            if (result?.serverError) {
               setEnabled(!checked);
               toastError({
                 description: `Failed to ${checked ? "enable" : "disable"} rule.`,
               });
             }
-          }}
-        />
-      </div>
+          } catch {
+            setEnabled(!checked);
+            toastError({
+              description: `Failed to ${checked ? "enable" : "disable"} rule.`,
+            });
+          }
+        }}
+      />
 
       <RuleDialog
         ruleId={ruleDialog.data?.ruleId}
@@ -1425,18 +1636,10 @@ function RuleActions({ ruleId }: { ruleId: string }) {
   );
 }
 
-function RuleActionsPreview() {
+function RuleActionsPreview({ enabled = true }: { enabled?: boolean }) {
   return (
     <div className="flex items-center gap-1.5">
-      <Tooltip content="Edit rule">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-8 w-8 p-0 text-muted-foreground"
-        >
-          <PencilIcon className="size-4" />
-        </Button>
-      </Tooltip>
+      <RuleEditToggleActionsPreview enabled={enabled} />
       <Tooltip content="Delete rule">
         <Button
           variant="ghost"
@@ -1446,8 +1649,28 @@ function RuleActionsPreview() {
           <TrashIcon className="size-4" />
         </Button>
       </Tooltip>
-      <Switch checked={true} />
     </div>
+  );
+}
+
+function RuleEditToggleActionsPreview({
+  enabled = true,
+}: {
+  enabled?: boolean;
+}) {
+  return (
+    <>
+      <Tooltip content="Edit rule">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-8 w-8 p-0 text-muted-foreground"
+        >
+          <PencilIcon className="size-4" />
+        </Button>
+      </Tooltip>
+      <Switch checked={enabled} />
+    </>
   );
 }
 
